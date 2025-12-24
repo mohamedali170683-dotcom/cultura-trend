@@ -1,12 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { authApi, getToken, removeToken, User } from '../lib/api';
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, name?: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isDemo: boolean;
@@ -16,64 +14,74 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Check if running in demo mode (no Supabase configured)
-  const isDemo = !import.meta.env.VITE_SUPABASE_URL;
+  const [isDemo, setIsDemo] = useState(false);
 
   useEffect(() => {
-    if (isDemo) {
-      setLoading(false);
-      return;
-    }
+    // Check for existing session
+    const checkSession = async () => {
+      const token = getToken();
 
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+      if (!token) {
+        setLoading(false);
+        return;
+      }
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+      try {
+        const { user } = await authApi.getMe();
+        setUser(user);
+      } catch (error) {
+        // Token invalid, remove it
+        removeToken();
+      } finally {
         setLoading(false);
       }
-    );
+    };
 
-    return () => subscription.unsubscribe();
-  }, [isDemo]);
+    checkSession();
+  }, []);
 
-  const signUp = async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName }
-      }
-    });
-    return { error: error as Error | null };
+  const signUp = async (email: string, password: string, name?: string) => {
+    try {
+      const { user } = await authApi.signup(email, password, name);
+      setUser(user);
+      setIsDemo(false);
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-    return { error: error as Error | null };
+    try {
+      const { user } = await authApi.login(email, password);
+      setUser(user);
+      setIsDemo(false);
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
+    try {
+      await authApi.logout();
+    } catch (error) {
+      // Ignore errors, just clear local state
+    } finally {
+      setUser(null);
+      setIsDemo(false);
+    }
+  };
+
+  // Function to enter demo mode
+  const enterDemoMode = () => {
+    setIsDemo(true);
+    setUser({ id: 'demo', email: 'demo@example.com', name: 'Demo User' });
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut, isDemo }}>
+    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut, isDemo }}>
       {children}
     </AuthContext.Provider>
   );
@@ -85,4 +93,15 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+}
+
+// Hook to enter demo mode
+export function useDemoMode() {
+  const [isDemo, setIsDemo] = useState(false);
+
+  const enterDemo = () => {
+    setIsDemo(true);
+  };
+
+  return { isDemo, enterDemo };
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X, Building2, Tag, Loader } from 'lucide-react';
-import { supabase, Brand, Keyword } from '../lib/supabase';
+import { brandsApi, keywordsApi, Brand, Keyword } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 
 const BRAND_COLORS = [
@@ -23,23 +23,26 @@ export function KeywordManager({ onKeywordsChange }: KeywordManagerProps) {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // New brand form
   const [showBrandForm, setShowBrandForm] = useState(false);
   const [newBrandName, setNewBrandName] = useState('');
   const [newBrandColor, setNewBrandColor] = useState(BRAND_COLORS[0]);
+  const [brandLoading, setBrandLoading] = useState(false);
 
   // New keyword form
   const [showKeywordForm, setShowKeywordForm] = useState(false);
   const [newKeyword, setNewKeyword] = useState('');
   const [selectedBrandId, setSelectedBrandId] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
+  const [keywordLoading, setKeywordLoading] = useState(false);
 
   useEffect(() => {
     if (isDemo) {
       // Demo data
       setBrands([
-        { id: '1', user_id: 'demo', name: 'My Brand', color: '#e11d48', created_at: '' }
+        { id: '1', userId: 'demo', name: 'My Brand', color: '#e11d48', createdAt: '' }
       ]);
       setKeywords([]);
       setLoading(false);
@@ -47,34 +50,25 @@ export function KeywordManager({ onKeywordsChange }: KeywordManagerProps) {
     }
 
     if (user) {
-      fetchBrands();
-      fetchKeywords();
+      fetchData();
     }
   }, [user, isDemo]);
 
-  const fetchBrands = async () => {
-    const { data, error } = await supabase
-      .from('brands')
-      .select('*')
-      .eq('user_id', user?.id)
-      .order('created_at', { ascending: true });
-
-    if (!error && data) {
-      setBrands(data);
-    }
-    setLoading(false);
-  };
-
-  const fetchKeywords = async () => {
-    const { data, error } = await supabase
-      .from('keywords')
-      .select('*')
-      .eq('user_id', user?.id)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setKeywords(data);
-      onKeywordsChange?.(data);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [brandsData, keywordsData] = await Promise.all([
+        brandsApi.list(),
+        keywordsApi.list()
+      ]);
+      setBrands(brandsData);
+      setKeywords(keywordsData);
+      onKeywordsChange?.(keywordsData);
+    } catch (err) {
+      setError('Failed to load data');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -84,10 +78,10 @@ export function KeywordManager({ onKeywordsChange }: KeywordManagerProps) {
     if (isDemo) {
       const newBrand: Brand = {
         id: Date.now().toString(),
-        user_id: 'demo',
+        userId: 'demo',
         name: newBrandName,
         color: newBrandColor,
-        created_at: new Date().toISOString()
+        createdAt: new Date().toISOString()
       };
       setBrands([...brands, newBrand]);
       setNewBrandName('');
@@ -95,47 +89,50 @@ export function KeywordManager({ onKeywordsChange }: KeywordManagerProps) {
       return;
     }
 
-    const { data, error } = await supabase
-      .from('brands')
-      .insert({
-        user_id: user?.id,
-        name: newBrandName,
-        color: newBrandColor
-      })
-      .select()
-      .single();
-
-    if (!error && data) {
-      setBrands([...brands, data]);
+    try {
+      setBrandLoading(true);
+      const brand = await brandsApi.create(newBrandName, newBrandColor);
+      setBrands([...brands, brand]);
       setNewBrandName('');
       setShowBrandForm(false);
+    } catch (err) {
+      setError('Failed to create brand');
+    } finally {
+      setBrandLoading(false);
     }
   };
 
   const removeBrand = async (brandId: string) => {
     if (isDemo) {
       setBrands(brands.filter(b => b.id !== brandId));
-      setKeywords(keywords.filter(k => k.brand_id !== brandId));
+      setKeywords(keywords.filter(k => k.brandId !== brandId));
       return;
     }
 
-    await supabase.from('keywords').delete().eq('brand_id', brandId);
-    await supabase.from('brands').delete().eq('id', brandId);
-    setBrands(brands.filter(b => b.id !== brandId));
-    setKeywords(keywords.filter(k => k.brand_id !== brandId));
+    try {
+      await brandsApi.delete(brandId);
+      setBrands(brands.filter(b => b.id !== brandId));
+      const updatedKeywords = keywords.filter(k => k.brandId !== brandId);
+      setKeywords(updatedKeywords);
+      onKeywordsChange?.(updatedKeywords);
+    } catch (err) {
+      setError('Failed to delete brand');
+    }
   };
 
   const addKeyword = async () => {
     if (!newKeyword.trim() || !selectedBrandId) return;
 
     if (isDemo) {
+      const brand = brands.find(b => b.id === selectedBrandId);
       const newKw: Keyword = {
         id: Date.now().toString(),
-        user_id: 'demo',
-        brand_id: selectedBrandId,
+        userId: 'demo',
+        brandId: selectedBrandId,
         keyword: newKeyword,
         category: selectedCategory,
-        created_at: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        brand: brand ? { id: brand.id, name: brand.name, color: brand.color } : undefined
       };
       const updated = [...keywords, newKw];
       setKeywords(updated);
@@ -145,23 +142,18 @@ export function KeywordManager({ onKeywordsChange }: KeywordManagerProps) {
       return;
     }
 
-    const { data, error } = await supabase
-      .from('keywords')
-      .insert({
-        user_id: user?.id,
-        brand_id: selectedBrandId,
-        keyword: newKeyword,
-        category: selectedCategory
-      })
-      .select()
-      .single();
-
-    if (!error && data) {
-      const updated = [...keywords, data];
+    try {
+      setKeywordLoading(true);
+      const keyword = await keywordsApi.create(newKeyword, selectedBrandId, selectedCategory);
+      const updated = [...keywords, keyword];
       setKeywords(updated);
       onKeywordsChange?.(updated);
       setNewKeyword('');
       setShowKeywordForm(false);
+    } catch (err) {
+      setError('Failed to create keyword');
+    } finally {
+      setKeywordLoading(false);
     }
   };
 
@@ -173,10 +165,14 @@ export function KeywordManager({ onKeywordsChange }: KeywordManagerProps) {
       return;
     }
 
-    await supabase.from('keywords').delete().eq('id', keywordId);
-    const updated = keywords.filter(k => k.id !== keywordId);
-    setKeywords(updated);
-    onKeywordsChange?.(updated);
+    try {
+      await keywordsApi.delete(keywordId);
+      const updated = keywords.filter(k => k.id !== keywordId);
+      setKeywords(updated);
+      onKeywordsChange?.(updated);
+    } catch (err) {
+      setError('Failed to delete keyword');
+    }
   };
 
   if (loading) {
@@ -189,6 +185,13 @@ export function KeywordManager({ onKeywordsChange }: KeywordManagerProps) {
 
   return (
     <div className="flex flex-col gap-6">
+      {error && (
+        <div className="auth-error">
+          {error}
+          <button onClick={() => setError(null)} className="ml-2">×</button>
+        </div>
+      )}
+
       {/* Brands Section */}
       <div className="card p-6">
         <div className="flex justify-between items-center mb-4">
@@ -230,8 +233,16 @@ export function KeywordManager({ onKeywordsChange }: KeywordManagerProps) {
               ))}
             </div>
             <div className="flex gap-2">
-              <button onClick={addBrand} className="btn btn-primary">Save</button>
-              <button onClick={() => setShowBrandForm(false)} className="btn btn-outline">Cancel</button>
+              <button
+                onClick={addBrand}
+                className="btn btn-primary"
+                disabled={brandLoading}
+              >
+                {brandLoading ? 'Saving...' : 'Save'}
+              </button>
+              <button onClick={() => setShowBrandForm(false)} className="btn btn-outline">
+                Cancel
+              </button>
             </div>
           </div>
         )}
@@ -249,7 +260,7 @@ export function KeywordManager({ onKeywordsChange }: KeywordManagerProps) {
                   />
                   <span className="font-medium">{brand.name}</span>
                   <span className="text-xs text-gray-400">
-                    {keywords.filter(k => k.brand_id === brand.id).length} keywords
+                    {keywords.filter(k => k.brandId === brand.id).length} keywords
                   </span>
                 </div>
                 <button
@@ -314,8 +325,12 @@ export function KeywordManager({ onKeywordsChange }: KeywordManagerProps) {
               </select>
             </div>
             <div className="flex gap-2">
-              <button onClick={addKeyword} className="btn btn-primary" disabled={!selectedBrandId}>
-                Save
+              <button
+                onClick={addKeyword}
+                className="btn btn-primary"
+                disabled={!selectedBrandId || keywordLoading}
+              >
+                {keywordLoading ? 'Saving...' : 'Save'}
               </button>
               <button onClick={() => setShowKeywordForm(false)} className="btn btn-outline">
                 Cancel
@@ -333,7 +348,7 @@ export function KeywordManager({ onKeywordsChange }: KeywordManagerProps) {
             </p>
           ) : (
             keywords.map(kw => {
-              const brand = brands.find(b => b.id === kw.brand_id);
+              const brand = kw.brand || brands.find(b => b.id === kw.brandId);
               return (
                 <div key={kw.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
                   <div className="flex items-center gap-3">

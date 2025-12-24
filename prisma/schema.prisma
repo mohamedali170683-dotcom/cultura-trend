@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brands   Brand[]
+  keywords Keyword[]
+  sessions Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Brand {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String   @default("#3b82f6")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keywords Keyword[]
+
+  @@index([userId])
+}
+
+model Keyword {
+  id        String   @id @default(cuid())
+  userId    String
+  brandId   String
+  keyword   String
+  category  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  analyses TrendAnalysis[]
+
+  @@index([userId])
+  @@index([brandId])
+}
+
+model TrendAnalysis {
+  id          String   @id @default(cuid())
+  keywordId   String
+  phase       String
+  priority    String
+  r0          Float
+  snr         Float
+  velocity    Float
+  peakDays    Int
+  confidence  Float
+  analyzedAt  DateTime @default(now())
+
+  keyword Keyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+
+  @@index([keywordId])
+}
