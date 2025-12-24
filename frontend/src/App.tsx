@@ -1,9 +1,13 @@
 import React, { useState, useMemo } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell
 } from 'recharts';
-import { Bell, Search, Download, Plus, TrendingUp } from 'lucide-react';
+import { Bell, Search, Download, Plus, TrendingUp, LogOut, Settings, Tag } from 'lucide-react';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { Auth } from './components/Auth';
+import { KeywordManager } from './components/KeywordManager';
 import './App.css';
 
 // Types
@@ -279,7 +283,6 @@ const SignalModal: React.FC<{ signal: Signal | null; onClose: () => void }> = ({
         </div>
 
         <div className="modal-body">
-          {/* Metrics Grid */}
           <div className="grid grid-cols-4 gap-4 mb-8">
             <div className="metric-card metric-card-red">
               <p className="text-xs text-gray-600 font-medium">R₀ Score</p>
@@ -309,7 +312,6 @@ const SignalModal: React.FC<{ signal: Signal | null; onClose: () => void }> = ({
             </div>
           </div>
 
-          {/* Chart */}
           <div className="mb-8">
             <h3 className="font-semibold text-gray-900 mb-4">Trend Evolution (90 Days)</h3>
             <div className="bg-gray-50 rounded-xl p-4" style={{ height: '256px' }}>
@@ -339,7 +341,6 @@ const SignalModal: React.FC<{ signal: Signal | null; onClose: () => void }> = ({
             </div>
           </div>
 
-          {/* First Mover Window */}
           <div className="first-mover-card mb-8">
             <div className="flex justify-between items-center flex-wrap gap-4">
               <div>
@@ -365,7 +366,6 @@ const SignalModal: React.FC<{ signal: Signal | null; onClose: () => void }> = ({
             </div>
           </div>
 
-          {/* Recommendations */}
           <div className="mb-6">
             <h3 className="font-semibold text-gray-900 mb-4">📝 Recommended Content Actions</h3>
             <div className="flex flex-col gap-3">
@@ -381,7 +381,6 @@ const SignalModal: React.FC<{ signal: Signal | null; onClose: () => void }> = ({
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex gap-3 flex-wrap pt-4 border-t">
             <button className="btn btn-primary flex-1">✨ Generate Content Brief</button>
             <button className="btn btn-secondary">Add to Campaign</button>
@@ -393,12 +392,87 @@ const SignalModal: React.FC<{ signal: Signal | null; onClose: () => void }> = ({
   );
 };
 
-// Main App
-export default function App() {
+// Navigation Component
+function Navigation() {
+  const { user, signOut, isDemo } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const stats = useMemo(() => ({
+    critical: MOCK_SIGNALS.filter((s) => s.priority === 'critical').length,
+  }), []);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/');
+  };
+
+  const isActive = (path: string) => location.pathname === path;
+
+  return (
+    <nav className="nav">
+      <div className="container nav-inner">
+        <div className="flex items-center gap-3">
+          <div className="logo-icon">
+            <TrendingUp size={24} color="white" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold gradient-text">TrendPulse</h1>
+            <p className="text-xs text-gray-500">Cultural Trend Prediction</p>
+          </div>
+        </div>
+
+        <div className="nav-links">
+          <span
+            className={`nav-link ${isActive('/dashboard') ? 'active' : ''}`}
+            onClick={() => navigate('/dashboard')}
+          >
+            📊 Dashboard
+          </span>
+          <span
+            className={`nav-link ${isActive('/keywords') ? 'active' : ''}`}
+            onClick={() => navigate('/keywords')}
+          >
+            <Tag size={16} style={{ display: 'inline', marginRight: '4px' }} />
+            Keywords
+          </span>
+          <span
+            className={`nav-link ${isActive('/settings') ? 'active' : ''}`}
+            onClick={() => navigate('/settings')}
+          >
+            <Settings size={16} style={{ display: 'inline', marginRight: '4px' }} />
+            Settings
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="notification-btn">
+            <Bell size={20} />
+            {stats.critical > 0 && <span className="notification-dot" />}
+          </div>
+          {isDemo ? (
+            <div className="demo-badge">Demo</div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div>
+              <button onClick={handleSignOut} className="btn btn-outline" style={{ padding: '0.5rem' }}>
+                <LogOut size={18} />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+// Dashboard Page
+function Dashboard() {
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null);
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterBrand, setFilterBrand] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const navigate = useNavigate();
 
   const filteredSignals = useMemo(() => {
     return MOCK_SIGNALS.filter((s) => {
@@ -430,40 +504,9 @@ export default function App() {
   const brands = [...new Set(MOCK_SIGNALS.map((s) => s.brand))];
 
   return (
-    <div className="app">
-      {/* Navigation */}
-      <nav className="nav">
-        <div className="container nav-inner">
-          <div className="flex items-center gap-3">
-            <div className="logo-icon">
-              <TrendingUp size={24} color="white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold gradient-text">TrendPulse</h1>
-              <p className="text-xs text-gray-500">Cultural Trend Prediction</p>
-            </div>
-          </div>
-
-          <div className="nav-links">
-            <span className="nav-link active">📊 Dashboard</span>
-            <span className="nav-link">⚡ Signals</span>
-            <span className="nav-link">🏢 Brands</span>
-            <span className="nav-link">📄 Reports</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="notification-btn">
-              <Bell size={20} />
-              {stats.critical > 0 && <span className="notification-dot" />}
-            </div>
-            <div className="avatar">MA</div>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
+    <>
+      <Navigation />
       <main className="container py-8">
-        {/* Stats */}
         <div className="grid grid-cols-4 gap-6 mb-8">
           <StatCard
             title="Active Signals"
@@ -496,7 +539,6 @@ export default function App() {
           />
         </div>
 
-        {/* Filters */}
         <div className="card p-4 mb-6">
           <div className="flex gap-4 items-center flex-wrap">
             <div className="search-wrapper flex-1">
@@ -531,7 +573,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Main Grid */}
         <div className="grid grid-cols-3 gap-6">
           <div className="col-span-2">
             <div className="flex justify-between items-center mb-4">
@@ -547,7 +588,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Sidebar */}
           <div className="flex flex-col gap-6">
             <div className="card p-6">
               <h3 className="font-semibold text-gray-900 mb-4">Priority Distribution</h3>
@@ -586,7 +626,7 @@ export default function App() {
               <div className="flex flex-col gap-3">
                 <button className="action-btn action-btn-primary">✨ Generate Weekly Report</button>
                 <button className="action-btn">🔔 Configure Alerts</button>
-                <button className="action-btn">
+                <button className="action-btn" onClick={() => navigate('/keywords')}>
                   <Plus size={18} />
                   Add Keywords
                 </button>
@@ -615,7 +655,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* Footer */}
       <footer className="footer">
         <div className="container py-6">
           <div className="flex justify-between items-center flex-wrap gap-4">
@@ -623,15 +662,124 @@ export default function App() {
               <TrendingUp size={20} color={COLORS.primary} />
               <span className="font-semibold gradient-text">TrendPulse</span>
               <span className="text-gray-400">|</span>
-              <span className="text-sm text-gray-500">Demo Version</span>
+              <span className="text-sm text-gray-500">v1.0</span>
             </div>
             <div className="text-sm text-gray-500">Cultural Trend Prediction Platform • Powered by R₀ Science</div>
           </div>
         </div>
       </footer>
 
-      {/* Modal */}
       <SignalModal signal={selectedSignal} onClose={() => setSelectedSignal(null)} />
-    </div>
+    </>
+  );
+}
+
+// Keywords Page
+function KeywordsPage() {
+  return (
+    <>
+      <Navigation />
+      <main className="container py-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Keyword Management</h1>
+          <p className="text-gray-500">Add brands and keywords to track cultural trends</p>
+        </div>
+        <KeywordManager />
+      </main>
+    </>
+  );
+}
+
+// Settings Page
+function SettingsPage() {
+  const { user, isDemo } = useAuth();
+
+  return (
+    <>
+      <Navigation />
+      <main className="container py-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+          <p className="text-gray-500">Manage your account and preferences</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-6">
+          <div className="card p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">Account</h3>
+            {isDemo ? (
+              <p className="text-gray-500">Running in demo mode. Sign up to save your data.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div>
+                  <p className="text-sm text-gray-500">Email</p>
+                  <p className="font-medium">{user?.email}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Account ID</p>
+                  <p className="font-medium text-xs">{user?.id}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="card p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">Notifications</h3>
+            <div className="flex flex-col gap-3">
+              <label className="flex items-center gap-3">
+                <input type="checkbox" defaultChecked className="w-4 h-4" />
+                <span>Email alerts for critical trends</span>
+              </label>
+              <label className="flex items-center gap-3">
+                <input type="checkbox" defaultChecked className="w-4 h-4" />
+                <span>Weekly trend digest</span>
+              </label>
+              <label className="flex items-center gap-3">
+                <input type="checkbox" className="w-4 h-4" />
+                <span>Slack notifications</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="card p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">API Access</h3>
+            <p className="text-gray-500 text-sm mb-4">
+              Connect TrendPulse to your tools via API.
+            </p>
+            <button className="btn btn-outline">Generate API Key</button>
+          </div>
+
+          <div className="card p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">Data Sources</h3>
+            <div className="flex flex-col gap-2">
+              <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                <span>Google Trends</span>
+                <span className="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded-full">Coming Soon</span>
+              </div>
+              <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                <span>Social Media APIs</span>
+                <span className="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded-full">Coming Soon</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </>
+  );
+}
+
+// Main App with Routing
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Auth />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/keywords" element={<KeywordsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
