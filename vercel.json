@@ -2,5 +2,8 @@
   "buildCommand": "npm install && npx prisma generate && npx prisma db push --skip-generate && cd frontend && npm install && npm run build",
   "installCommand": "npm install && cd frontend && npm install",
   "outputDirectory": "frontend/dist",
-  "framework": null
+  "framework": null,
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
 }
