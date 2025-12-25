@@ -485,6 +485,7 @@ function Dashboard() {
   const [showComparison, setShowComparison] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [dataSources, setDataSources] = useState<{ news: boolean; reddit: boolean; googleTrends: boolean } | null>(null);
   const navigate = useNavigate();
 
   const fetchData = useCallback(async () => {
@@ -492,6 +493,10 @@ function Dashboard() {
     try {
       const data = await dataApi.analyzeUserKeywords();
       setSignals(data.results);
+      // Store data source status from API response
+      if ((data as any).dataSources) {
+        setDataSources((data as any).dataSources);
+      }
       setAiLoading(true);
       const ai = await aiApi.getRecommendations(data.results.map(r => ({ keyword: r.keyword, brand: r.brand, priority: r.priority, r0: r.r0, phase: r.phase })));
       setAiAnalysis(ai);
@@ -636,10 +641,32 @@ function Dashboard() {
             <div className="card p-6">
               <h3 className="font-semibold text-gray-900 mb-4">Data Sources</h3>
               <div className="space-y-2">
-                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl"><span>📰 News API</span><span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">Active</span></div>
-                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl"><span>🔗 Reddit</span><span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">Active</span></div>
-                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl"><span>📊 Google</span><span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">Active</span></div>
+                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                  <span>📰 News API</span>
+                  {dataSources?.news ? (
+                    <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">Live</span>
+                  ) : (
+                    <span className="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded-full">Simulated</span>
+                  )}
+                </div>
+                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                  <span>💬 Reddit</span>
+                  <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">Live</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                  <span>📊 Google Trends</span>
+                  {dataSources?.googleTrends ? (
+                    <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">Live</span>
+                  ) : (
+                    <span className="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded-full">Simulated</span>
+                  )}
+                </div>
               </div>
+              {(!dataSources?.news || !dataSources?.googleTrends) && (
+                <p className="text-xs text-gray-500 mt-3">
+                  Add NEWS_API_KEY and SERPAPI_KEY in Vercel for live data
+                </p>
+              )}
             </div>
           </div>
         </div>
